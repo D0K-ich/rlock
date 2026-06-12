@@ -1,0 +1,21 @@
+[package]
+name = "locker_builder"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+eframe = "0.27"
+egui = "0.27"
+rfd = "0.14"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+dirs = "5.0"
+chrono = "0.4"
+rand = "0.10.1"
+rypes = { git = "https://github.com/D0K-ich/rypes" }
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+strip = true

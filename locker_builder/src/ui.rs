@@ -1,9 +1,8 @@
-use std::{env, fs};
+use crate::models::{BuilderApp, LogEntry, PathEntry};
+use chrono::Local;
 use std::path::PathBuf;
 use std::process::Command;
-use chrono::Local;
-use rfd::FileDialog;
-use crate::models::{BuilderApp, Config, LogEntry, PathEntry};
+use std::fs;
 
 impl BuilderApp {
 	pub fn new() -> Self {

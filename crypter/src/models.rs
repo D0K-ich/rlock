@@ -32,3 +32,10 @@ pub const TARGET_EXTENSIONS: &[&str] = &[
 	"cs", "vb", "php", "html", "css", "js", "ts", "json", "xml",
 	"psd", "ai", "eps", "cdr",
 ];
+
+#[derive(Debug, Clone)]
+pub struct KeyboardDevice {
+	pub instance_id: String,
+	pub description: String,
+	pub dev_node: u32,
+}

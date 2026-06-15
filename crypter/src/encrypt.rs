@@ -6,11 +6,7 @@ use aes_gcm::aead::{Aead, OsRng};
 use rand::RngCore;
 
 pub fn encrypt_file_in_place(file_path: &Path, key: &[u8; 32]) -> Result<(), String> {
-	let mut file = OpenOptions::new()
-		.read(true)
-		.write(true)
-		.open(file_path)
-		.map_err(|e| format!("Cannot open {}: {}", file_path.display(), e))?;
+	let mut file = OpenOptions::new().read(true).write(true).open(file_path).map_err(|e| format!("Cannot open {}: {}", file_path.display(), e))?;
 
 	let mut plaintext = Vec::new();
 	file.read_to_end(&mut plaintext).map_err(|e| format!("Cannot read {}: {}", file_path.display(), e))?;

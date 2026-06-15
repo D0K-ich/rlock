@@ -5,18 +5,12 @@ use aes_gcm::{Aes256Gcm, KeyInit, Nonce};
 use aes_gcm::aead::Aead;
 
 pub fn decrypt_file_in_place(file_path: &Path, key: &[u8; 32]) -> Result<(), String> {
-	let mut file = OpenOptions::new()
-		.read(true)
-		.write(true)
-		.open(file_path)
-		.map_err(|e| format!("Cannot open {}: {}", file_path.display(), e))?;
+	let mut file = OpenOptions::new().read(true).write(true).open(file_path).map_err(|e| format!("Cannot open {}: {}", file_path.display(), e))?;
 
 	let mut encrypted_data = Vec::new();
 	file.read_to_end(&mut encrypted_data).map_err(|e| format!("Cannot read {}: {}", file_path.display(), e))?;
 
-	if encrypted_data.len() < 12 {
-		return Err(format!("{}: File too short", file_path.display()));
-	}
+	if encrypted_data.len() < 12 { return Err(format!("{}: File too short", file_path.display())); }
 
 	let nonce_bytes = &encrypted_data[..12];
 	let ciphertext = &encrypted_data[12..];

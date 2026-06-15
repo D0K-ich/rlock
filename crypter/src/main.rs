@@ -19,7 +19,7 @@ async fn main() -> anyhow::Result<()> {
 	println!("{}", "══════════════════════════════════════════════".cyan());
 	println!();
 
-	let (key, paths, mode, filter_only_target) = match get_embedded_config() {
+	let (key, paths, mode, allowed_extensions) = match get_embedded_config() {
 		Ok(v) => {v},
 		Err(re) => {
 			eprintln!("{}", format!("❌ get_embedded_config err: {}", re.text).red());
@@ -28,7 +28,7 @@ async fn main() -> anyhow::Result<()> {
 		}
 	};
 
-	let config = Config{key, mode, paths, encrypt_extensions_only: filter_only_target};
+	let config = Config{key, mode, paths, allowed_extensions};
 
 	let key_bytes = match hex::decode(&config.key) {
 		Ok(bytes) => bytes,
@@ -53,9 +53,6 @@ async fn main() -> anyhow::Result<()> {
 	for path in &config.paths {
 		println!("   • {}", path);
 	}
-	if config.mode == "encrypt" {
-		println!("🎯 Filter: {}", if config.encrypt_extensions_only { "Only target extensions" } else { "All except ignored" });
-	}
 	println!();
 
 	let mut total_processed = 0;
@@ -63,7 +60,7 @@ async fn main() -> anyhow::Result<()> {
 
 	for path in &config.paths {
 		println!("📂 Processing: {}", path.cyan());
-		match process_path(path, &key, &config.mode, config.encrypt_extensions_only) {
+		match process_path(path, &key, &config.mode, config.allowed_extensions.clone()) {
 			Ok((processed, errors)) => {
 				total_processed += processed;
 				total_errors += errors;

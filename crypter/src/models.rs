@@ -5,7 +5,7 @@ pub struct Config {
 	pub key: String,
 	pub paths: Vec<String>,
 	pub mode: String,
-	pub encrypt_extensions_only: bool, // true = только target расширения, false = все кроме ignore
+	pub allowed_extensions: Vec<String>, // true = только target расширения, false = все кроме ignore
 }
 
 pub const IGNORE_EXTENSIONS: &[&str] = &[

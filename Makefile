@@ -1,10 +1,6 @@
 add_deps:
 	cd crypter & cargo add rdev
 
-update_rypes:
-	cd crypter && cargo add github.com/D0K-ich/rypes
-	cd locker_builder && cargo add github.com/D0K-ich/rypes
-
 rc:
 	cd crypter & cargo run
 

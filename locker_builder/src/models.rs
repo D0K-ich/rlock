@@ -44,7 +44,6 @@ pub struct FileExtension {
 	pub category: String,
 }
 
-
 pub const EXTENSIONS: &[(&str, &[&str])] = &[
 	("📄 Documents", &[
 		"txt", "pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "odt", "ods", "odp", "rtf", "md",

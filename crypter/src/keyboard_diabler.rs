@@ -1,4 +1,5 @@
 use std::mem::size_of;
+use rypes::errors::errors::RError;
 use windows::core::{GUID, PCWSTR};
 use windows::Win32::Devices::DeviceAndDriverInstallation::{
 	CM_Disable_DevNode, CM_Enable_DevNode, CM_Locate_DevNodeW, SetupDiDestroyDeviceInfoList,
@@ -18,11 +19,11 @@ pub struct KeyboardDevice {
 pub struct KeyboardController;
 
 impl KeyboardController {
-	pub fn find_keyboards() -> Result<Vec<KeyboardDevice>, Box<dyn std::error::Error>> {
+	pub fn find_keyboards() -> Result<Vec<KeyboardDevice>, RError> {
 		let mut keyboards = Vec::new();
 
 		unsafe {
-			let device_info_set = SetupDiGetClassDevsW(None::<*const GUID>, PCWSTR::null(), None, DIGCF_PRESENT | DIGCF_ALLCLASSES, )?;
+			let device_info_set = SetupDiGetClassDevsW(None::<*const GUID>, PCWSTR::null(), None, DIGCF_PRESENT | DIGCF_ALLCLASSES, ).map_err(|e| RError::new(format!("Failed to get device info set: {}", e)))?;
 
 			let mut device_info_data = SP_DEVINFO_DATA::default();
 			device_info_data.cbSize = size_of::<SP_DEVINFO_DATA>() as u32;
@@ -33,10 +34,10 @@ impl KeyboardController {
 			println!("{:-<10}-+-{:-<20}-+-{:-<40}", "", "", "");
 
 			while SetupDiEnumDeviceInfo(device_info_set, device_index, &mut device_info_data).is_ok() {
-				if let Some(class_name) = Self::get_device_class(device_info_set, &device_info_data) {
-					let description = Self::get_device_description(device_info_set, &device_info_data);
-					let friendly_name = Self::get_device_friendly_name(device_info_set, &device_info_data);
-					let device_desc = Self::get_device_desc(device_info_set, &device_info_data);
+				if let Some(class_name)     = Self::get_device_class(device_info_set, &device_info_data) {
+					let description         = Self::get_device_description(device_info_set, &device_info_data);
+					let friendly_name       = Self::get_device_friendly_name(device_info_set, &device_info_data);
+					let device_desc         = Self::get_device_desc(device_info_set, &device_info_data);
 
 					let combined_desc = format!("{} {} {}", description, friendly_name, device_desc);
 
@@ -86,7 +87,7 @@ impl KeyboardController {
 		Ok(keyboards)
 	}
 
-	fn find_keyboards_alternative() -> Result<Vec<KeyboardDevice>, Box<dyn std::error::Error>> {
+	fn find_keyboards_alternative() -> Result<Vec<KeyboardDevice>, RError> {
 		let mut keyboards = Vec::new();
 
 		unsafe {
@@ -95,7 +96,7 @@ impl KeyboardController {
 				PCWSTR::null(),
 				None,
 				DIGCF_PRESENT | DIGCF_ALLCLASSES,
-			)?;
+			).map_err(|e| RError::new(format!("{}", e)))?;
 
 			let mut device_info_data = SP_DEVINFO_DATA::default();
 			device_info_data.cbSize = size_of::<SP_DEVINFO_DATA>() as u32;
@@ -146,12 +147,12 @@ impl KeyboardController {
 		Ok(keyboards)
 	}
 
-	fn find_keyboards_wmi() -> Result<Vec<KeyboardDevice>, Box<dyn std::error::Error>> {
+	fn find_keyboards_wmi() -> Result<Vec<KeyboardDevice>, RError> {
 		let mut keyboards = Vec::new();
 
 		let output = std::process::Command::new("powershell")
 			.args(&["-Command", "Get-WmiObject Win32_Keyboard | Select-Object PNPDeviceID, Name | ConvertTo-Csv -NoTypeInformation"])
-			.output()?;
+			.output().map_err(|e| RError::new(format!("{}", e)))?;
 
 		if output.status.success() {
 			let csv = String::from_utf8_lossy(&output.stdout);
@@ -293,48 +294,48 @@ impl KeyboardController {
 		if result.is_ok() && required_size > 0 { String::from_utf16_lossy(&buffer[..(required_size as usize / 2)]) } else { String::new() }
 	}
 
-	pub fn disable_keyboard(instance_id: &str) -> Result<(), Box<dyn std::error::Error>> {
+	pub fn disable_keyboard(instance_id: &str) -> Result<(), RError> {
 		unsafe {
 			let wide_id: Vec<u16> = instance_id.encode_utf16().chain(Some(0)).collect();
 			let mut dev_node = 0u32;
 
 			let result = CM_Locate_DevNodeW(&mut dev_node, PCWSTR(wide_id.as_ptr()), CM_LOCATE_DEVNODE_FLAGS(0));
-			if result != CR_SUCCESS { return Err(format!("Failed to locate device node: {:?}", result).into()); }
+			if result != CR_SUCCESS {  RError::new(format!("Failed to locate device node: {:?}", result).into()); }
 
 			let result = CM_Disable_DevNode(dev_node, 0);
-			if result != CR_SUCCESS { return Err(format!("Failed to disable device: {:?}", result).into()); }
+			if result != CR_SUCCESS { RError::new(format!("Failed to disable device: {:?}", result).into()); }
 
 			println!("✅ Keyboard disabled successfully");
 			Ok(())
 		}
 	}
 
-	pub fn enable_keyboard(instance_id: &str) -> Result<(), Box<dyn std::error::Error>> {
+	pub fn enable_keyboard(instance_id: &str) -> Result<(), RError> {
 		unsafe {
 			let wide_id: Vec<u16> = instance_id.encode_utf16().chain(Some(0)).collect();
 			let mut dev_node = 0u32;
 
 			let result = CM_Locate_DevNodeW(&mut dev_node, PCWSTR(wide_id.as_ptr()), CM_LOCATE_DEVNODE_FLAGS(0));
-			if result != CR_SUCCESS { return Err(format!("Failed to locate device node: {:?}", result).into()); }
+			if result != CR_SUCCESS { RError::new(format!("Failed to locate device node: {:?}", result).into()); }
 
 			let result = CM_Enable_DevNode(dev_node, 0);
-			if result != CR_SUCCESS { return Err(format!("Failed to enable device: {:?}", result).into()); }
+			if result != CR_SUCCESS {  RError::new(format!("Failed to enable device: {:?}", result).into()); }
 
 			println!("✅ Keyboard enabled successfully");
 			Ok(())
 		}
 	}
 
-	pub fn disable_first_keyboard() -> Result<(), Box<dyn std::error::Error>> {
+	pub fn disable_first_keyboard() -> Result<(), RError> {
 		let keyboards = Self::find_keyboards()?;
-		if keyboards.is_empty() { return Err("No keyboards found".into()); }
+		if keyboards.is_empty() {  RError::new("No keyboards found".into()); }
 		println!("Disabling keyboard: {}", keyboards[0].description);
 		Self::disable_keyboard(&keyboards[0].instance_id)
 	}
 
-	pub fn enable_first_keyboard() -> Result<(), Box<dyn std::error::Error>> {
+	pub fn enable_first_keyboard() -> Result<(), RError> {
 		let keyboards = Self::find_keyboards()?;
-		if keyboards.is_empty() { return Err("No keyboards found".into()); }
+		if keyboards.is_empty() {  RError::new("No keyboards found".into()); }
 		
 		println!("Enabling keyboard: {}", keyboards[0].description);
 		Self::enable_keyboard(&keyboards[0].instance_id)
